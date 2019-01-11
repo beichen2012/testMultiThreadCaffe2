@@ -15,7 +15,6 @@ std::string init_path = std::string(IMG_PATH) + R"(pnet_20181010_init_net_final.
 std::string predict_path = std::string(IMG_PATH) + R"(pnet_20181010_predict_net.pb)";
 
 cv::Mat gsrc;
-std::shared_ptr<caffe2::Workspace> gpw;
 
 int Preprocess(const cv::Mat& src, caffe2::TensorCPU& input)
 {
@@ -104,12 +103,36 @@ int FeedInputBlob(caffe2::Blob* data_blob, caffe2::TensorCPU& input, caffe2::Dev
 
 
 
-int testSingleThread(caffe2::DeviceType device)
+int testSingleThread(caffe2::DeviceType device, int device_id = 0)
 {
     ENTER_FUNC;
 
     BTimer timer;
-    caffe2::Workspace w{gpw.get()};
+    auto w = std::shared_ptr<caffe2::Workspace>(new caffe2::Workspace("root"));
+    //device option
+    caffe2::DeviceOption device_option;
+    device_option.set_device_type((int)device);
+    device_option.set_device_id(0);
+
+
+    caffe2::NetDef initNet;
+    CAFFE_ENFORCE(caffe2::ReadProtoFromFile(init_path, &initNet));
+
+    //clear net preset device option
+    for(int i = 0; i < initNet.op_size(); i++)
+    {
+        auto p = initNet.mutable_op(i);
+        auto type = p->type();
+        //std::cout << i << type << "\t";
+        //std::cout << "device op:" << p->device_option().device_type() << std::endl;
+        //p->clear_device_option();
+        p->release_device_option();
+    }
+
+    initNet.mutable_device_option()->CopyFrom(device_option);
+    initNet.set_num_workers(1);
+    w->RunNetOnce(initNet);
+
     caffe2::NetDef predictNet;
     CAFFE_ENFORCE(caffe2::ReadProtoFromFile(predict_path, &predictNet));
 
@@ -122,12 +145,9 @@ int testSingleThread(caffe2::DeviceType device)
     }
 
     //device option
-    caffe2::DeviceOption device_option;
-    device_option.set_device_type((int)device);
-    device_option.set_device_id(0);
     predictNet.mutable_device_option()->CopyFrom(device_option);
     predictNet.set_num_workers(1);
-    w.CreateNet(predictNet);
+    w->CreateNet(predictNet);
     auto net_name_ = predictNet.name();
 
     cv::Mat src = gsrc.clone();
@@ -139,10 +159,10 @@ int testSingleThread(caffe2::DeviceType device)
 
         caffe2::TensorCPU input(caffe2::CPU);
         Preprocess(vsrc, input);
-        auto blob_in = w.GetBlob(std::string("data"));
+        auto blob_in = w->GetBlob(std::string("data"));
         FeedInputBlob(blob_in, input, device);
 
-        auto* net = w.GetNet(net_name_);
+        auto* net = w->GetNet(net_name_);
 
         net->TEST_Benchmark(5, 100, true);
 
@@ -155,10 +175,10 @@ int testSingleThread(caffe2::DeviceType device)
     } else{
         caffe2::TensorCPU input(caffe2::CPU);
         Preprocess(src, input);
-        auto blob_in = w.GetBlob(std::string("data"));
+        auto blob_in = w->GetBlob(std::string("data"));
         FeedInputBlob(blob_in, input, device);
 
-        auto* net = w.GetNet(net_name_);
+        auto* net = w->GetNet(net_name_);
 
         net->TEST_Benchmark(5, 100, true);
 //        for(;;)
@@ -183,7 +203,7 @@ void testMultiThread(int thread_num, int device_type)
     std::vector<std::thread> vt;
     for(int i = 0; i < thread_num; i++)
     {
-        vt.emplace_back(std::thread(testSingleThread, device));
+        vt.emplace_back(std::thread(testSingleThread, device, i));
     }
     for(auto& i : vt)
         i.join();
@@ -205,39 +225,17 @@ int main(int argc, char* argv[])
     LOGI("num threads: {}, device type is: {}", num_thread, device_type);
 
     ENTER_FUNC;
-    caffe2::GlobalInit();
+	int dargc = 2;
+	char ** dargv = new char*[2];
+	dargv[1] = "123";
+	dargv[2] = "--caffe2_omp_num_threads=4";
+    caffe2::GlobalInit(&dargc, &dargv);
     gsrc = cv::imread(std::string(IMG_PATH) + "faces1.jpg");
-    if (!gsrc.data)
-    {
+    if (!gsrc.data) {
         LOGE("error load image!");
         LEAVE_FUNC;
         return 0;
     }
-    gpw = std::shared_ptr<caffe2::Workspace>(new caffe2::Workspace("root"));
-    caffe2::NetDef initNet;
-    CAFFE_ENFORCE(caffe2::ReadProtoFromFile(init_path, &initNet));
-
-    //clear net preset device option
-    for(int i = 0; i < initNet.op_size(); i++)
-    {
-        auto p = initNet.mutable_op(i);
-        auto type = p->type();
-        //std::cout << i << type << "\t";
-        //std::cout << "device op:" << p->device_option().device_type() << std::endl;
-        //p->clear_device_option();
-        p->release_device_option();
-    }
-
-    //device option
-    caffe2::DeviceOption device_option;
-    device_option.set_device_type(device_type);
-    device_option.set_device_id(0);
-
-
-    initNet.mutable_device_option()->CopyFrom(device_option);
-    initNet.set_num_workers(1);
-    gpw->RunNetOnce(initNet);
-
 
     testMultiThread(num_thread, device_type);
 
