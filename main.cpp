@@ -225,11 +225,7 @@ int main(int argc, char* argv[])
     LOGI("num threads: {}, device type is: {}", num_thread, device_type);
 
     ENTER_FUNC;
-	int dargc = 2;
-	char ** dargv = new char*[2];
-	dargv[1] = "123";
-	dargv[2] = "--caffe2_omp_num_threads=4";
-    caffe2::GlobalInit(&dargc, &dargv);
+    caffe2::GlobalInit();
     gsrc = cv::imread(std::string(IMG_PATH) + "faces1.jpg");
     if (!gsrc.data) {
         LOGE("error load image!");
