@@ -82,22 +82,23 @@ int Preprocess(const std::vector<cv::Mat>& src, caffe2::TensorCPU& input)
 
 int FeedInputBlob(caffe2::Blob* data_blob, caffe2::TensorCPU& input, caffe2::DeviceType device_type_)
 {
-    if(device_type_ == caffe2::CPU)
-    {
-        caffe2::BlobGetMutableTensor(data_blob, device_type_)->ResizeLike(input);
-        caffe2::BlobGetMutableTensor(data_blob, device_type_)->ShareData(input);
-        //data_blob->GetMutableTensor(device_type_)->ResizeLike(input);
-        //data_blob->GetMutableTensor(device_type_)->ShareData(input);
-    }
-    else if(device_type_ == caffe2::CUDA)
-    {
-        caffe2::BlobGetMutableTensor(data_blob, device_type_)->CopyFrom(input);
-        //data_blob->GetMutableTensor(device_type_)->CopyFrom(input);
-    }
-    else
-    {
-        return -1;
-    }
+    caffe2::BlobGetMutableTensor(data_blob, device_type_)->CopyFrom(input);
+//    if(device_type_ == caffe2::CPU)
+//    {
+//        caffe2::BlobGetMutableTensor(data_blob, device_type_)->ResizeLike(input);
+//        caffe2::BlobGetMutableTensor(data_blob, device_type_)->ShareData(input);
+//        //data_blob->GetMutableTensor(device_type_)->ResizeLike(input);
+//        //data_blob->GetMutableTensor(device_type_)->ShareData(input);
+//    }
+//    else if(device_type_ == caffe2::CUDA)
+//    {
+//        caffe2::BlobGetMutableTensor(data_blob, device_type_)->CopyFrom(input);
+//        //data_blob->GetMutableTensor(device_type_)->CopyFrom(input);
+//    }
+//    else
+//    {
+//        return -1;
+//    }
     return 0;
 }
 
